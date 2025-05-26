@@ -1,0 +1,13 @@
+---
+title: "re_paircoding"
+author: "bea cheda"
+date: "2025-03-31"
+output: html_document
+---
+
+Links to the paidcoding exercises' repositories:
+
+My project:
+https://github.com/beatoutcourt/code_management_ex
+
+Project forked from Sascha Friedli: https://github.com/beatoutcourt/Report_Ex_CodeManagement

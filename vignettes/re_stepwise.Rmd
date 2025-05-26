@@ -1,0 +1,226 @@
+---
+title: "re_stepwise"
+author: "bea cheda"
+date: "2025-04-28"
+output: html_document
+---
+Load library
+```{r}
+library(tidyverse)
+```
+
+Read data
+```{r}
+df_stepwise_regression <- readr::read_csv("../data/df_for_stepwise_regression.csv")
+```
+Prepare setting for bivariate evaluation
+```{r}
+#Extract variable names without GPP
+variable_names <- setdiff(names(df_stepwise_regression), c("GPP_NT_VUT_REF"))
+
+#Set start variables/model to 0/NoData before running the loop
+r2_final <- 0 
+best_var <- NA
+best_model <- NULL 
+model_results <- tibble(variable = character(), 
+                        coefficient = numeric(), #create empty results tibble
+                        r_squared = numeric()) 
+```
+
+
+Loop over the variable names. Create each time a linear model and fill the model results into a tibble. Compare models' r.squared and save the highest.
+```{r}
+
+for(i in seq_along(variable_names)){
+  var_name <- variable_names[i]
+  formula <- as.formula(paste("GPP_NT_VUT_REF", "~", var_name))
+  linear_model <- lm(formula, data = df_stepwise_regression)
+  r2 <- summary(linear_model)$r.squared
+  
+  model_results <- model_results |> 
+    add_row(variable = var_name, 
+            coefficient = coef(linear_model)[2], 
+            r_squared = r2)
+  
+  if(r2 > r2_final){
+    r2_final <- r2
+    best_var <- var_name
+    best_model <- linear_model
+  }
+  
+}
+
+summary(best_model)
+
+```
+
+
+Have a look at the results of all bivariate models. The best variable is highlighted in red.
+```{r}
+
+ggplot(model_results, aes(x = variable, y = r_squared)) +
+  geom_point(aes(color = r_squared == max(r_squared))) +
+  ggrepel::geom_text_repel(aes(label = variable), size = 3) +
+  scale_color_manual(values = c("FALSE" = "black", "TRUE" = "red")) +
+  guides(color = "none") +
+  theme_minimal() +
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+```
+
+From the plot we can see that the bivariate model with the highest r.squared contains the variable PPFD_IN (incoming photosynthetic photon flux density). This model explains about 45% of the variation observed in GPP (r.squared = 0.452).
+
+Other variables, such as incoming shortwave radiation and temperature (both the consolidated and the gapfilled versions) also demonstrate high r.squared values (around 0.4). It is therefore probable, that these variables will appear in our final model. However we can expect that each of the both variable will appear only in one form in the final model, since the consolidated and the gapfilled versions are highly correlated.
+
+Further we can see that longwave radiation as well as vapor pressure deficit have both r.squared of between 0.1 and 0.2 while the other variables demonstrate r.squared values below 0.05. Those last variables are somewhat less likely to end up in our final model, since they don't explain much of the variation in GPP.
+
+
+
+Set up for the stepwise forward regression:
+
+- Create a vector with the included variables (PPFD_IN at the beginning)
+
+- Adapt formula and allow it to change dynamically in the loop
+
+- Create a final_model and a current_aic objects. Fill these objects with the best   bivariate model's results. 
+
+These initial values are to be overwritten in the loop when certain conditions are met. New "best" variables will be included in the included_variables vector and in the model's formula. final_model and current_aic are overwritten only when the new AIC performs better than the one in the older model.
+
+- Create a results_aic tibble, which will display the added variable and the        corresponding AIC value after each iteration of the loop.
+
+
+```{r}
+included_variables <- c("PPFD_IN")
+current_formula <- paste("GPP_NT_VUT_REF ~", paste(included_variables, collapse = " + "))
+current_model <- lm(as.formula(current_formula), data = df_stepwise_regression)
+final_model <- current_model
+current_aic <- extractAIC(current_model)[2]
+results_aic <- tibble(added = character(),
+                      aic = numeric())
+```
+
+
+While loop setting:
+Each round adds a variable to the old model. 
+First iterate over the remaining variable names and compare the new models. The model with the highest r.squared is retained and its AIC is computed and compared to the AIC of the previous, shorter, model. 
+If the new AIC performs better than the old one, current_aic is overwritten, the new "best" performing variable is added to the included variables vector and to the formula.
+As soon as the new AIC is smaller or equal to the old one, the while loop stops.
+```{r}
+continue <- TRUE
+
+
+while(continue){
+  best_r2 <- 0
+  best_aic <- current_aic
+  best_var <- NULL
+  best_model <- NULL
+  
+  
+  for(i in seq_along(variable_names)){
+    var_name <- variable_names[i]
+    test_formula <- paste(current_formula, "+", var_name)
+    test_model <- lm(as.formula(test_formula), data = df_stepwise_regression)
+    test_r2 <- summary(test_model)$r.squared
+    
+  
+    if(test_r2 > best_r2){
+    best_r2 <- test_r2
+    best_var <- var_name
+    best_model <- test_model
+    }
+    
+  }
+    
+    if(extractAIC(best_model)[2] < current_aic){
+      current_aic <- extractAIC(best_model)[2]
+      included_variables <- c(included_variables, best_var)
+      variable_names <- setdiff(variable_names, best_var)
+      current_formula <- paste("GPP_NT_VUT_REF ~", paste(included_variables, collapse = " + "))
+    
+     results_aic <- results_aic |> 
+       add_row(added = best_var, 
+               aic = current_aic)
+     
+     final_model <- best_model
+     
+    }else{
+      
+      continue <- FALSE
+    }
+}
+
+  
+print(results_aic)
+
+```
+
+Our final model contains the following variables:
+
+- Incoming photosynthetic flux density
+
+- Incoming long wave radiation
+
+- Site id
+
+- Vapor pressure deficit
+
+- Temperature
+
+- Short wave radiation
+
+- Wind speed
+
+- CO2 mole fraction
+
+- Precipitation
+
+- Atmospheric pressure
+
+Not included are: time of measurement and friction velocity. Further, other versions of long and short wave radiation, temperature as well as vapor pressure deficit are logically not included in the final model, since they are highly correlated with the corresponding variables already included in the model. The same explanation is probably also valid for the time of measurement. Besides having a very low r.squared value in the bivariate regression model (r.squared = 0.005), it is also probably correlated to seasonal varying predictors such as radiation and temperature.
+
+```{r}
+summary(best_model) #last model, that failed to improve aic
+```
+
+The last tested model, which failed to improve AIC, contained the time variable. We can see from the model summary, that the coefficient of that variable is highly insignificant (p value = 0.54), which is also a hint, that the variable actually should be excluded from the model. In the bivariate model, the coefficient of the time variable was highly significant though (see summary below), which supports the hypothesis that it correlates with other variables already included in the model and therefore "loses" its explanatory character once those other variables are part of the model.
+
+```{r}
+summary(lm(GPP_NT_VUT_REF ~ TIMESTAMP, data = df_stepwise_regression))
+```
+
+Below is the summary of the final model retained by the stepwise forward regression:
+
+```{r}
+summary(final_model)
+```
+
+
+```{r}
+ggplot(results_aic, aes(x = factor(added, levels = added), 
+                        y = aic)) +
+  geom_line(group = 1) +
+  geom_point() +
+  labs(title = "AIC by Added Variable", x = "Added Variable", y = "AIC") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+From this plot representing the evolution of the AIC during the stepwise forward regression, we see that its value improves greatly with the first four variables (incoming long wave radiation, site id, vapor pressure deficit and temperature). After that, the curve flattens with the introduction of the incoming shortwave radiation and the wind speed. For the last three variables (CO2 mole fraction, precipitation and atmospheric pressure) the difference in the AIC value is very small. Recall that those variables had already very small r.squared values in the bivariate models' evaluation. This is a further hint that these variables probably aren't as much important as for example incoming long wave radiation to explain changes in GPP.
+
+Something we didn't really expect at first: on one hand, the site id was the third variable to be introduced into the model, whereas it had a very low r.squared value in the bivariate models'evaluation. On the other hand, incoming short wave radiation, which performed best after PPFD, was added only in the middle of the stepwise forward regression. This again, can probably be explained by multicollinearity.
+
+The first variable to be introduced is PPFD, which is highly correlated to incoming short wave radiation. So, taken together, these variables are not very likely to explain much more variation in GPP than PPFD taken alone. Conversely, climate conditions are very likely to differ from site to site, which is why differentiating by site id after PPFD and incoming long wave radiation is appropriate. During the stepwise forward regression the focus is not on single predictors but on improving the global model. Therefore, variables that are more "unique" in the data set, contribute to improve the model more than introducing nearly the same variable over and over. This explains also why the AIC curve flattens after the first couple variables: the variables that are further introduced contribute to improve the model to some extent but don't add any "brand new" information anymore but rather "different versions" of already existing information.
+
+
+Observed VS Fitted GPP plot
+```{r}
+ggplot(data.frame(observed = model.frame(final_model)$GPP_NT_VUT_REF,
+                  fitted = fitted(final_model)),
+       aes(x = fitted, y = observed)) +
+  geom_point(alpha = 0.4) +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
+  labs(title = "Observed vs Fitted GPP", x = "Fitted", y = "Observed") +
+  theme_minimal()
+```
+
+Finally, we can have a look at the plot of the observed values in the data set against the fitted values from our final model. Overall the model doesn't perform too bad. Yet we can clearly see a curved pattern that indicates that a more flexible model (for example quadratic) might be more appropriate. The model clearly underpredicts for low values of GPP and from the curved pattern, it seems that high values of GPP tend to be underpredicted as well.
