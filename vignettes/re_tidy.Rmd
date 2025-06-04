@@ -1,89 +1,99 @@
 ---
-title: "re_tidy"
+title: "Report exercise Data Wrangling"
 author: "bea cheda"
 date: "2025-02-17"
 output: html_document
 ---
+## Goal of the exercise
+The goal of this exercise is to implement data wrangling steps in a hands-on example with data containing measurements of soil carbon concentration over time and exposed to different ambient CO2 concentration levels.
 
-Load the data
+
+### Load the data
 ```{r, message = FALSE, warning = FALSE}
-groenigen_data <- readr::read_delim("../data/groenigen_data.csv", 
-  delim = ";", escape_double = FALSE, trim_ws = TRUE, skip = 3)
+groenigen_data <- readr::read_delim("../data/groenigen_data.csv", delim = ";",                                        escape_double = FALSE, trim_ws = TRUE, skip = 3)
 ```
 
-Rename variables of interest
+### Rename variables of interest
 ```{r}
 base::names(groenigen_data)[names(groenigen_data)
   %in% c("Time (years)", "ambient CO2...6", "increased CO2...7")] <- c("years",      "ambient_CO2", "increased_CO2")
 
 ``` 
+## Assign Experiment Phases
 
-What is the range of the years variable?
+### Compute the range of the years variable and assign observations to early/mid/late phase
 ```{r}
 summary(groenigen_data$years)
 ```
 
 Minimum is 0 and maximum is 11, so each observation can be categorized as
-either early, mid or late phase.
-Assign 1 if experiment has taken place in the early phase
-Assign 2 if experiment has taken place in the mid phase
-Assign 3 if experiment has taken place in the late phase
+either early, mid or late phase (early until 3 years, mid 3 to 6 years, late more than 6 years )
+
+- Assign 1 if experiment has taken place in the early phase
+
+- Assign 2 if experiment has taken place in the mid phase
+
+- Assign 3 if experiment has taken place in the late phase
+
 Use nested ifelse statements
+
 ```{r}
 groenigen_data <- groenigen_data |>
-  dplyr::mutate(phase = ifelse(groenigen_data$years < 3, "early",
-                   ifelse(groenigen_data$years >= 3 
-                   & groenigen_data$years <= 6, "mid",
-                     "late")
-                  )
-                )
+  dplyr::mutate(
+    phase = ifelse(
+      years < 3, "early",
+      ifelse(
+        years >= 3 & years <= 6, "mid",
+        "late"
+      )
+    )
+  )
 ```
 
+## Log response ratios
 
-Calculate log-response ratio for each observation
+### Calculate log-response ratio for each observation
 ```{r}
 groenigen_data <- groenigen_data |> 
   dplyr::mutate(log_rr = log(increased_CO2 / ambient_CO2))
 ```
 
-Calculate the means of the log-response ratios for each phase
+### Calculate the means of the log-response ratios for each phase
 ```{r}
 rr_means <- groenigen_data |> 
   dplyr::group_by(phase) |> 
   dplyr::summarise(rr_mean = mean(log_rr))
 ```
 
-Visualize the phase means in a table
+### Visualize the phase means in a table
 ```{r}
 
 knitr::kable(rr_means, caption = "Log-response mean per phase")
 
 ```
+
+## Interpretation of the results
+### Groenigen study results
 The data we are looking at represent mean measurements of grams of soil Carbon 
 per square meter in different soils around the globe and with expositions to
 different concentration levels of CO2 (a high and a low level) over time.
 
 According to Groenigen et al., higher levels of CO2 concentration lead to
-increased carbon inputs to the soil (+19.8%), but they also stimulate the turnover 
-of soil C (+16.5%), implying that soils are maybe less of a carbon sink we count
-on in the future than we initially thought. If a higher concentration induces
-increases in both carbon input and carbon turnover, the measurements shouldn't
-fluctuate too much over time. A slight increase is expected, since the inputs
-increase somewhat more than the turnover.
+increased carbon inputs to the soil (+19.8%), but they also stimulate the turnover of soil C (+16.5%), implying that soils may have a lower net carbon intake potential than scientists initially thought. 
+We still expect a slight increase in carbon soil concentration since the intake increases more than the turnover (19.8% VS 16.5%).
 
-Looking at the log-response ratio
-RR = ln(carbon in soil under high CO2/carbon in soil under low CO2)
-we can expect a slightly positive RR. Since the carbon concentration in the soil
-is supposed to slightly increase from low to high CO2 atmospheric concentration,
-we expect the ratio to be slightly above 1. The natural logarithm of numbers
-slightly above 1 are positive and close to 0. If nothing changes, the ratio 
-remains 1 and the natural logarithm equals 0, if the turnover is bigger than
-the intake, the ratio will be below 1 and the RR will therefore be negative.
+### Interpretation of the mean log-response ratios
+RR = ln(carbon in soil under high CO2/carbon in soil under low CO2).
+According to Groenigen we could expect a slightly positive RR. Since the carbon concentration in the soil is supposed to slightly increase from low to high CO2 atmospheric concentration exposure, we expect the ratio to be slightly above 1. The natural logarithm of numbers slightly above 1 is positive and close to 0. If nothing changes, the ratio remains 1 and the natural logarithm equals 0. If the turnover is bigger than the intake, the ratio will be below 1 and the RR will therefore be negative.
 
-Our results for the early and mid phase are positive and slightly above 0 
-(respectively 0.01 and 0.02) as we expected. The increase in carbon soil intake
-due to higher atmospheric CO2 concentration is slightly bigger than the increase 
-in soil carbon turnover.
+Our results for the early and mid phases are on average positive and slightly above 0 (respectively 0.01 and 0.02) as we expected. The increase in carbon soil intake due to exposure to higher ambient CO2 concentration is slightly bigger than the increase in soil carbon turnover. On average, the soil acts as a net carbon sink during these phases.
 The mean RR for the late phase (>6 years), on the other hand, is slightly
-negative (-0.03), which would indicate that in the "long run", there is even
-more turnover than intake when the atmospheric CO2 concentration is high.
+negative (-0.03). This suggests that in the long run, the increase in carbon turnover tends to outpace the increase in carbon soil intake. In this third phase, the soil acts a net carbon source on average.
+
+The overall net effect is difficult to predict. In the early and mid phases the soil acts as a carbon sink but turns to a carbon source in the late phase. If the soil remains a carbon source after the late phase, we could get a net carbon loss in the long term. 
+These results show that Groenigen et al. have good reasons to think that we might have overestimated the potential of soils for carbon intake and that more research is needed to properly disentangle the different effects of higher ambient CO2 concentration on carbon soil intake and turnover.
+
+
+Source: Groenigen, Kees Jan van, Xuan Qi, Craig W. Osenberg, Yiqi Luo, and Bruce A. Hungate. “Faster Decomposition Under Increased Atmospheric CO2 Limits Soil Carbon Storage.” Science 344, no. 6183 (May 2, 2014): 508–9. https://doi.org/10.1126/science.1249534.
+
+

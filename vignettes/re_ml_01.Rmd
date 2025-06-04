@@ -1,11 +1,14 @@
 ---
-title: "re_ml_01"
+title: "Report Exercise Supervised Machine Learning I"
 author: "bea cheda"
 date: "2025-05-05"
 output: html_document
 ---
 
-Load libraries
+## Goal of the exercise
+The goal of this exercise is to compare linear regression and knn models with regard to the bias - variance trade off. Both methods were used to model GPP daily fluxes at the measurement site in Davos (Data from FLUXNET). The exercise also contains further investigations on the role of k in the knn model.
+
+### Load libraries
 ```{r, message = FALSE, warning = FALSE}
 library(dplyr)
 library(ggplot2)
@@ -15,7 +18,8 @@ library(caret)
 library(recipes)
 ```
 
-Load daily fluxes data
+## Models preparation - lm and knn
+### Load daily fluxes data
 ```{r, message = FALSE, warning = FALSE}
 daily_fluxes <- readr::read_csv("../data/FLX_CH-Dav_FLUXNET2015_FULLSET_DD_1997-2014_1-3.csv") |> 
 
@@ -52,13 +56,13 @@ daily_fluxes <- readr::read_csv("../data/FLX_CH-Dav_FLUXNET2015_FULLSET_DD_1997-
 ```
 
 
-Make a copy of daily fluxes for the knn analysis
+### Make a copy of daily fluxes for the knn analysis
 ```{r}
 daily_fluxes_knn <- daily_fluxes
 ```
 
 
-Read raw data for the visualizations
+### Read raw data for the visualizations
 ```{r, message = FALSE, warning = FALSE}
 daily_fluxes_visu <- readr::read_csv("../data/FLX_CH-Dav_FLUXNET2015_FULLSET_DD_1997-2014_1-3.csv") |> 
 
@@ -82,7 +86,7 @@ daily_fluxes_visu <- readr::read_csv("../data/FLX_CH-Dav_FLUXNET2015_FULLSET_DD_
 ```
 
 
-Split data into training and test sets
+### Split data into training and test sets
 ```{r}
 set.seed(1982)  # for reproducibility
 split <- rsample::initial_split(daily_fluxes, prop = 0.7, strata = "VPD_F")
@@ -91,7 +95,7 @@ daily_fluxes_test <- rsample::testing(split)
 ```
 
 
-Model and pre-processing formulation, use all variables but LW_IN_F
+### Model and pre-processing formulation, use all variables but LW_IN_F
 ```{r}
 pp <- recipes::recipe(GPP_NT_VUT_REF ~ SW_IN_F + VPD_F + TA_F, 
                       data = daily_fluxes_train |> drop_na()) |> 
@@ -100,7 +104,7 @@ pp <- recipes::recipe(GPP_NT_VUT_REF ~ SW_IN_F + VPD_F + TA_F,
   recipes::step_scale(recipes::all_numeric(), -recipes::all_outcomes())
 ```
 
-Fit linear regression model
+### Fit linear regression model
 ```{r, message = FALSE, warning = FALSE}
 mod_lm <- caret::train(
   pp, 
@@ -111,7 +115,7 @@ mod_lm <- caret::train(
 )
 ```
 
-Fit knn model
+### Fit knn model
 ```{r, message = FALSE, warning = FALSE}
 mod_knn <- caret::train(
   pp, 
@@ -123,46 +127,48 @@ mod_knn <- caret::train(
 )
 ```
 
-Call evaluation function
+### Call evaluation function
 ```{r}
 source("../R/eval_model_fct.R")
 ```
 
-Evaluate lm model with test data
+## Models evaluation
+### Evaluate lm model with test data
 ```{r}
 eval_model(mod = mod_lm, df_train = daily_fluxes_train, df_test = daily_fluxes_test)
 ```
 
-Evaluate knn model with test data
+### Evaluate knn model with test data
 ```{r}
 eval_model(mod = mod_knn, df_train = daily_fluxes_train, df_test = daily_fluxes_test)
 ```
 
+## Interpretation of the models evaluations
 Linear regression models are less flexible than KNN models. The linear model is more stable and less prone to overfitting. Therefore the RMSE remains almost the same in the test and the training set. The linear model therefore bears more the risk of underfitting than overfitting. Since it fits only a linear relationship, it is not able to capture more complex patterns in the data.
 Conversely, the KNN model is more flexible, but tends to overfitting. The model performs good on the training set, but also starts memorizing its data. The model is therefore not generalizable and doesn't perform good on test data. Overfitting has a small bias but leads to a big variance. A big variance leads to an increase in the RMSE and we can also observe a decrease in the R squared because the model was trained "too much" on training data and can't properly predict the test set.
 
-Overall the KNN model still performs better than the linear model though. Even if the R squared is higher and the RMSE noticeably lower in the test set (compared to the training set), both metrics perform better than both the training and test set of the linear model. This is be a hint, that the relation between GPP and the chosen variables is probably not exactly linear. The flexibility of KNN would explain here why this model has better metrics than the linear one.
+Overall the KNN model still performs better than the linear model though. Even if the R squared is higher and the RMSE noticeably lower in the test set (compared to the training set), both metrics perform better than both the training and test set of the linear model. This is a hint, that the relation between GPP and the chosen variables is probably not exactly linear. The flexibility of KNN would explain here why this model has better metrics than the linear one.
  
 Variance - bias trade off: as seen before, the KNN model performs better to predict our data but also has a bigger performance gap between test and training data, while the linear model remains very stable. This means that the bias is probably lower in the KNN model (higher R squared, the more flexible model better explains the variation of GPP) but the price to pay is an increase in the variance (big jump in the RMSE for the test set, probable overfitting). Conversely, the RMSE value of the linear model doesn't make this big jump in the test set, which means that the model is less likely to be overfitted. The bias is therefore probably bigger than in the KNN model.
 
 
 
-Next step of the analysis: plot fitted on raw values
+## Plot fitted on raw values
 
 Predict GPP on the test set for the two different models and attach TIMESTAMP to predictions.
 
-Training data
+### Training data
 ```{r}
 train_df <- daily_fluxes_train |> 
   drop_na() |> 
   select(TIMESTAMP) |>
   mutate(
-  pred_lm = predict(mod_lm, newdata = daily_fluxes_train |> drop_na()),
-  pred_knn = predict(mod_knn, newdata = daily_fluxes_train |> drop_na())
+    pred_lm = predict(mod_lm, newdata = daily_fluxes_train |> drop_na()),
+    pred_knn = predict(mod_knn, newdata = daily_fluxes_train |> drop_na())
 )
 ```
 
-Test data
+### Test data
 ```{r}
 pred_df <- daily_fluxes_test |> 
   drop_na() |> 
@@ -174,7 +180,7 @@ pred_df <- daily_fluxes_test |>
 ```
 
 
-Plot raw data and add predicted data from the test set - lm model
+## Plot raw data and add predicted data from the test set - lm model
 ```{r}
 ggplot(data = daily_fluxes_visu, aes(x = TIMESTAMP, y = GPP_NT_VUT_REF, color = "Observed")) +
   geom_line(linewidth = 0.5) +
@@ -188,7 +194,7 @@ ggplot(data = daily_fluxes_visu, aes(x = TIMESTAMP, y = GPP_NT_VUT_REF, color = 
   theme_classic()
 ```
 
-Plot raw data and add predicted data from the test set - KNN model
+## Plot raw data and add predicted data from the test set - KNN model
 ```{r}
 ggplot(data = daily_fluxes_visu, aes(x = TIMESTAMP, y = GPP_NT_VUT_REF, color = "Observed")) +
   geom_line(linewidth = 0.5) +
@@ -202,25 +208,26 @@ ggplot(data = daily_fluxes_visu, aes(x = TIMESTAMP, y = GPP_NT_VUT_REF, color = 
   theme_classic()
 ```
 
+### Interpretation of the fitted - raw plots
 The predicted values of both models follow the same temporal pattern as the data, which indicates that both models were able to capture the main feature in the data. Both models were unable to predict extreme values of GPP, yet the linear model seems to perform a bit better in this case. We would have expected the more flexible model to better predict the "extreme" values than the linear model. But maybe this is due to the fact that local averages tend to shrink everything toward this neighborhood mean, while linear models can always extrapolate a bit.
 
 One other interesting thing to notice, is that we've kept only "good" data for the KNN and regression models. Now plotting the fitted values on the raw data, we can see that the "bad" data is the "old" data.
 
 
-The role of k in KNN:
+## The role of k in KNN
 
 R squared is mostly used as an indicator for the "goodness of the model". It indicates how much variation in GPP is explained by the model.
 
 MAE is the mean absolute error and basically gives us the mean difference between observed and predicted values using absolute errors instead of the usual squared errors. Since we use absolute errors big errors have less importance than when they are squared.
 
-Hypothesis:
+### Hypothesis:
 
 For k approaching n, the model should become "useless". By taking more and more neighbors to predict values, the model will tend to predict the average of the training set. The model will therefore be underfitted and have a large bias, which will be visible in low R squared and a high MAE of the training and the test set. On the other hand, the variance of the model should be low. 
 
 For k approaching 1, the model will tend to overfitting. In the training set, the R squared should be high and the MAE low (we get really good at predicting training data). However, the model is very bad at generalizing. In the test set the MAE will likely increase, because the variance of the model will be very high. The R squared should decrease, because we can explain the training data well but this doesn't apply to the test data. In this case, the bias is low but the variance is very large.
 
 
-Split data into test and train set
+### Split data into test and train set
 ```{r}
 set.seed(376)
 split_knn <- rsample::initial_split(daily_fluxes_knn, prop = 0.7, strata = "VPD_F")
@@ -228,7 +235,7 @@ daily_fluxes_knn_train <- rsample::training(split)
 daily_fluxes_knn_test <- rsample::testing(split)
 ```
 
-Pre processing steps
+### Pre processing steps
 ```{r}
 pp_knn <- recipes::recipe(GPP_NT_VUT_REF ~ SW_IN_F + VPD_F + TA_F, 
                       data = daily_fluxes_knn_train |> drop_na()) |> 
@@ -237,12 +244,12 @@ pp_knn <- recipes::recipe(GPP_NT_VUT_REF ~ SW_IN_F + VPD_F + TA_F,
   recipes::step_scale(recipes::all_numeric(), -recipes::all_outcomes())
 ```
 
-Create empty metrics df
+### Create empty metrics df
 ```{r}
 results_both <- data.frame(type = character(), k = integer(), MAE = numeric())
 ```
 
-Loop over different values of k and store model metrics
+### Loop over different values of k and store model metrics
 ```{r, message = FALSE, warning = FALSE}
 for (k_val in 1:100) {
   model <- train(
@@ -254,26 +261,33 @@ for (k_val in 1:100) {
     metric = "MAE"
   )
   
+  # train predictions
   preds_train <- predict(model, newdata = daily_fluxes_knn_train |> drop_na())
+  # train observations
   obs_train <- daily_fluxes_knn_train |> drop_na() |> pull(GPP_NT_VUT_REF)
   
+  # train metrics
   mae_val_train <- MAE(obs_train, preds_train)
-
+  # train metrics in results' df
   results_both <- results_both |> 
     add_row(type = "train", k = k_val, MAE = mae_val_train)
   
+  
+  # test predictions
   preds_test <- predict(model, newdata = daily_fluxes_knn_test |> drop_na())
+  # test observations
   obs_test <- daily_fluxes_knn_test |> drop_na() |> pull(GPP_NT_VUT_REF)
   
+  # test metrics
   mae_val_test <- MAE(obs_test, preds_test)
-  
+  # test metrics in results' df
   results_both <- results_both |> 
     add_row(type = "test", k = k_val, MAE = mae_val_test)
  
 }
 ```
 
-Plot model metrics - MAE VS k
+### Plot model metrics - MAE VS k
 ```{r}
 ggplot(results_both, aes(x = k, y = MAE, color = type)) +
   geom_line(linewidth = 1, alpha = 0.7) +
@@ -286,13 +300,14 @@ ggplot(results_both, aes(x = k, y = MAE, color = type)) +
   theme_minimal()
 ```
 
+## Interpretation of the results
 As expected in our hypothesis, for k close to 1, the MAE is very small for the training set and is much bigger for the test set. This is the low bias - high variance setting we expected. If we look at k close to 100, we see that both MAE are relatively close to one another and that the test set MAE increases again after first decreasing. This is the "underfitted" scenario, where the model goes toward the "average" prediction. We have therefore a high bias and a low variance. If the bias is big enough, it counteracts the low variance and the MAE increases again. So, the underfitted area, is the one where the test set's MAE increases again and both MAE's are relatively high.The overfitted area is the area where the training's set MAE is very low, while the test set's MAE is high. The overfitted model performs extremely good with training data (low MAE) but is not generalizable and therefore poorly predicts the test data (increase in variance and high MAE).
 In conclusion, the best model for generalization, is where the test set's MAE is lowest (around k = 20 on the plot). 
 
 
-Find the "best" k:
+## Find the "best" k:
 
-Extract MAE of the test set
+### Extract MAE of the test set
 ```{r}
 mae_test <- results_both |> 
   filter(type == "test")
@@ -300,7 +315,7 @@ mae_test <- results_both |>
 
 Adapt the loop. Look only at the test set's MAE results. MAE doesn't continuously decrease (cf. plot). Therefore introduce some patience in the for loop and don't make it stop the first time the MAE increases again. Set patience = 10. Best k is retained if the 10 next k values lead to a higher MAE.
 
-Set loop features before start
+### Set loop features before start
 ```{r}
 best_mae <- Inf
 best_k <- NA
@@ -308,12 +323,12 @@ patience <- 10
 counter <- 0
 ```
 
-Create a result data frame
+### Create a result data frame
 ```{r}
 results_test <- data.frame(k = integer(), MAE = numeric())
 ```
 
-Run the loop for k values 1:100
+### Run the loop for k values 1:100
 ```{r, message = FALSE, warning = FALSE}
 for (k_val in 1:100) {
   model <- train(
@@ -325,36 +340,40 @@ for (k_val in 1:100) {
     metric = "MAE"
   )
   
+  # predictions
   preds <- predict(model, newdata = daily_fluxes_knn_test |> drop_na())
+  # observations
   obs <- daily_fluxes_knn_test |> drop_na() |> pull(GPP_NT_VUT_REF)
   
+  # metrics
   mae_val <- MAE(obs, preds)
-  
+  # metrics in results' df
   results_test <- results_test |> 
     add_row(k = k_val, MAE = mae_val)
   
-  # Early stopping check
+  # early stopping check
   if (mae_val < best_mae) {
     best_mae <- mae_val
     best_k <- k_val
-    counter <- 0  # reset counter on improvement
+    counter <- 0  # reset patience if new MAE is better
   } else {
     counter <- counter + 1
   }
   
-  if (counter >= patience) {
+  if (counter >= patience) {  # define condition to stop the loop
     print(paste("Stop at k =", k_val, ", best k =", best_k, ", MAE = ", round(best_mae, 4)))
     break
   }
 }
 ```
 
+### Best k
 The best k for model generalization is therefore k = 19. The MAE is lowest for the test data at this k value and increases again with bigger k values.
 
-Control with the previously extracted MAE values
+### Control with the previously extracted MAE values
 ```{r}
 which.min(mae_test$MAE)
 ```
 
-The MAE is minimized with k = 19 for k in 1:100.
+Confirmation: the MAE is minimized with k = 19 for k in 1:100.
 

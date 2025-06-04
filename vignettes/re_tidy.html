@@ -13,7 +13,7 @@
 
 <meta name="date" content="2025-02-17" />
 
-<title>re_tidy</title>
+<title>Report exercise Data Wrangling</title>
 
 <script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
 // be compatible with the behavior of Pandoc < 2.8).
@@ -350,43 +350,74 @@ display: none;
 
 
 
-<h1 class="title toc-ignore">re_tidy</h1>
+<h1 class="title toc-ignore">Report exercise Data Wrangling</h1>
 <h4 class="author">bea cheda</h4>
 <h4 class="date">2025-02-17</h4>
 
 </div>
 
 
-<p>Load the data</p>
-<pre class="r"><code>groenigen_data &lt;- readr::read_delim(&quot;../data/groenigen_data.csv&quot;, 
-  delim = &quot;;&quot;, escape_double = FALSE, trim_ws = TRUE, skip = 3)</code></pre>
-<p>Rename variables of interest</p>
+<div id="goal-of-the-exercise" class="section level2">
+<h2>Goal of the exercise</h2>
+<p>The goal of this exercise is to implement data wrangling steps in a
+hands-on example with data containing measurements of soil carbon
+concentration over time and exposed to different ambient CO2
+concentration levels.</p>
+<div id="load-the-data" class="section level3">
+<h3>Load the data</h3>
+<pre class="r"><code>groenigen_data &lt;- readr::read_delim(&quot;../data/groenigen_data.csv&quot;, delim = &quot;;&quot;,                                        escape_double = FALSE, trim_ws = TRUE, skip = 3)</code></pre>
+</div>
+<div id="rename-variables-of-interest" class="section level3">
+<h3>Rename variables of interest</h3>
 <pre class="r"><code>base::names(groenigen_data)[names(groenigen_data)
   %in% c(&quot;Time (years)&quot;, &quot;ambient CO2...6&quot;, &quot;increased CO2...7&quot;)] &lt;- c(&quot;years&quot;,      &quot;ambient_CO2&quot;, &quot;increased_CO2&quot;)</code></pre>
-<p>What is the range of the years variable?</p>
+</div>
+</div>
+<div id="assign-experiment-phases" class="section level2">
+<h2>Assign Experiment Phases</h2>
+<div id="compute-the-range-of-the-years-variable-and-assign-observations-to-earlymidlate-phase" class="section level3">
+<h3>Compute the range of the years variable and assign observations to
+early/mid/late phase</h3>
 <pre class="r"><code>summary(groenigen_data$years)</code></pre>
 <pre><code>##    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
 ##    0.00    2.00    4.00    4.42    7.00   11.00</code></pre>
 <p>Minimum is 0 and maximum is 11, so each observation can be
-categorized as either early, mid or late phase. Assign 1 if experiment
-has taken place in the early phase Assign 2 if experiment has taken
-place in the mid phase Assign 3 if experiment has taken place in the
-late phase Use nested ifelse statements</p>
+categorized as either early, mid or late phase (early until 3 years, mid
+3 to 6 years, late more than 6 years )</p>
+<ul>
+<li><p>Assign 1 if experiment has taken place in the early
+phase</p></li>
+<li><p>Assign 2 if experiment has taken place in the mid phase</p></li>
+<li><p>Assign 3 if experiment has taken place in the late phase</p></li>
+</ul>
+<p>Use nested ifelse statements</p>
 <pre class="r"><code>groenigen_data &lt;- groenigen_data |&gt;
-  dplyr::mutate(phase = ifelse(groenigen_data$years &lt; 3, &quot;early&quot;,
-                   ifelse(groenigen_data$years &gt;= 3 
-                   &amp; groenigen_data$years &lt;= 6, &quot;mid&quot;,
-                     &quot;late&quot;)
-                  )
-                )</code></pre>
-<p>Calculate log-response ratio for each observation</p>
+  dplyr::mutate(
+    phase = ifelse(
+      years &lt; 3, &quot;early&quot;,
+      ifelse(
+        years &gt;= 3 &amp; years &lt;= 6, &quot;mid&quot;,
+        &quot;late&quot;
+      )
+    )
+  )</code></pre>
+</div>
+</div>
+<div id="log-response-ratios" class="section level2">
+<h2>Log response ratios</h2>
+<div id="calculate-log-response-ratio-for-each-observation" class="section level3">
+<h3>Calculate log-response ratio for each observation</h3>
 <pre class="r"><code>groenigen_data &lt;- groenigen_data |&gt; 
   dplyr::mutate(log_rr = log(increased_CO2 / ambient_CO2))</code></pre>
-<p>Calculate the means of the log-response ratios for each phase</p>
+</div>
+<div id="calculate-the-means-of-the-log-response-ratios-for-each-phase" class="section level3">
+<h3>Calculate the means of the log-response ratios for each phase</h3>
 <pre class="r"><code>rr_means &lt;- groenigen_data |&gt; 
   dplyr::group_by(phase) |&gt; 
   dplyr::summarise(rr_mean = mean(log_rr))</code></pre>
-<p>Visualize the phase means in a table</p>
+</div>
+<div id="visualize-the-phase-means-in-a-table" class="section level3">
+<h3>Visualize the phase means in a table</h3>
 <pre class="r"><code>knitr::kable(rr_means, caption = &quot;Log-response mean per phase&quot;)</code></pre>
 <table>
 <caption>Log-response mean per phase</caption>
@@ -411,35 +442,58 @@ late phase Use nested ifelse statements</p>
 </tr>
 </tbody>
 </table>
+</div>
+</div>
+<div id="interpretation-of-the-results" class="section level2">
+<h2>Interpretation of the results</h2>
+<div id="groenigen-study-results" class="section level3">
+<h3>Groenigen study results</h3>
 <p>The data we are looking at represent mean measurements of grams of
 soil Carbon per square meter in different soils around the globe and
 with expositions to different concentration levels of CO2 (a high and a
 low level) over time.</p>
 <p>According to Groenigen et al., higher levels of CO2 concentration
 lead to increased carbon inputs to the soil (+19.8%), but they also
-stimulate the turnover of soil C (+16.5%), implying that soils are maybe
-less of a carbon sink we count on in the future than we initially
-thought. If a higher concentration induces increases in both carbon
-input and carbon turnover, the measurements shouldn’t fluctuate too much
-over time. A slight increase is expected, since the inputs increase
-somewhat more than the turnover.</p>
-<p>Looking at the log-response ratio RR = ln(carbon in soil under high
-CO2/carbon in soil under low CO2) we can expect a slightly positive RR.
-Since the carbon concentration in the soil is supposed to slightly
-increase from low to high CO2 atmospheric concentration, we expect the
-ratio to be slightly above 1. The natural logarithm of numbers slightly
-above 1 are positive and close to 0. If nothing changes, the ratio
-remains 1 and the natural logarithm equals 0, if the turnover is bigger
-than the intake, the ratio will be below 1 and the RR will therefore be
+stimulate the turnover of soil C (+16.5%), implying that soils may have
+a lower net carbon intake potential than scientists initially thought.
+We still expect a slight increase in carbon soil concentration since the
+intake increases more than the turnover (19.8% VS 16.5%).</p>
+</div>
+<div id="interpretation-of-the-mean-log-response-ratios" class="section level3">
+<h3>Interpretation of the mean log-response ratios</h3>
+<p>RR = ln(carbon in soil under high CO2/carbon in soil under low CO2).
+According to Groenigen we could expect a slightly positive RR. Since the
+carbon concentration in the soil is supposed to slightly increase from
+low to high CO2 atmospheric concentration exposure, we expect the ratio
+to be slightly above 1. The natural logarithm of numbers slightly above
+1 is positive and close to 0. If nothing changes, the ratio remains 1
+and the natural logarithm equals 0. If the turnover is bigger than the
+intake, the ratio will be below 1 and the RR will therefore be
 negative.</p>
-<p>Our results for the early and mid phase are positive and slightly
-above 0 (respectively 0.01 and 0.02) as we expected. The increase in
-carbon soil intake due to higher atmospheric CO2 concentration is
-slightly bigger than the increase in soil carbon turnover. The mean RR
-for the late phase (&gt;6 years), on the other hand, is slightly
-negative (-0.03), which would indicate that in the “long run”, there is
-even more turnover than intake when the atmospheric CO2 concentration is
-high.</p>
+<p>Our results for the early and mid phases are on average positive and
+slightly above 0 (respectively 0.01 and 0.02) as we expected. The
+increase in carbon soil intake due to exposure to higher ambient CO2
+concentration is slightly bigger than the increase in soil carbon
+turnover. On average, the soil acts as a net carbon sink during these
+phases. The mean RR for the late phase (&gt;6 years), on the other hand,
+is slightly negative (-0.03). This suggests that in the long run, the
+increase in carbon turnover tends to outpace the increase in carbon soil
+intake. In this third phase, the soil acts a net carbon source on
+average.</p>
+<p>The overall net effect is difficult to predict. In the early and mid
+phases the soil acts as a carbon sink but turns to a carbon source in
+the late phase. If the soil remains a carbon source after the late
+phase, we could get a net carbon loss in the long term. These results
+show that Groenigen et al. have good reasons to think that we might have
+overestimated the potential of soils for carbon intake and that more
+research is needed to properly disentangle the different effects of
+higher ambient CO2 concentration on carbon soil intake and turnover.</p>
+<p>Source: Groenigen, Kees Jan van, Xuan Qi, Craig W. Osenberg, Yiqi
+Luo, and Bruce A. Hungate. “Faster Decomposition Under Increased
+Atmospheric CO2 Limits Soil Carbon Storage.” Science 344, no. 6183 (May
+2, 2014): 508–9. <a href="https://doi.org/10.1126/science.1249534" class="uri">https://doi.org/10.1126/science.1249534</a>.</p>
+</div>
+</div>
 
 
 

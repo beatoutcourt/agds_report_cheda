@@ -1,59 +1,69 @@
 ---
-title: "re_airquality"
+title: "Report Exercise Airquality - Data visualisation"
 author: "bea cheda"
 date: "2025-03-10"
 output: html_document
 ---
-Load data
+## Goal of the exercise
+The goal of this exercise is to learn how to efficiently visualize data on different supports (tables, graphs, ranges, etc.) by telling a story with data. The data set used contains information about air quality and meteorological measurements in New York in 1973.
+
+### Load data
 ```{r}
 airquality <- datasets::airquality
 ```
 
-Load ggplot library
+### Load ggplot library
 ```{r}
 library(ggplot2)
 ```
 
-
+## Description of the data set
 The dataset "airquality" from the R Software contains daily air
 measurements in New York from May 1st to September 30th 1973. It contains 153 observations on 6 variables:
 
-  - Ozone (in ppb)
-  - Solar Radiation (lang in the frequency band 4000-7700 Angstroms)
-  - Wind (in mph)
-  - Temperature (in Degrees Fahrenheit)
+  - Ozone (mean Ozone in ppb from 1300 to 1500 at Roosevelt Island)
+  - Solar Radiation (in Langleys in the frequency band 4000-7700 Angstroms from 0800 to 1200 hours at Central Park)
+  - Wind (average wind speed in mph at 0700 and 1000 hours at LaGuardia Airport)
+  - Temperature (Maximum daily temperature in Degrees Fahrenheit at LaGuardia Airport)
   - Month (1 to 12)
   - Day of the Month (1 to 31)
   
 The data were collected by the New York State Department of Conservation and the National Weather Service of the USA.
 
 Knowing that a high ozone concentration at ground level is an indicator for poor air quality, it would be interesting to understand how it varies with temperature and solar radiation.
-We would expect the associations between ozone and temperature and between ozone and solar radiation to be of the same sign, since increased solar radiation usually goes along with higher temperatures too.
+The band in which solar radiation is measured (400-770 nm) is part of the visible light. We know that this part of the solar radiation and temperature tend to show a positive correlation, especially on clear days and on surfaces with low albedo. Urban areas usually show a low albedo and therefore can absorb and reemit this part of the solar radiation in form of heat relatively efficiently on clear days. Further, the data set contains measures of the late Spring and the Summer. This is the optimal season for getting intense visible radiation. So, in this specific case, we would expect the associations between ozone and temperature and between ozone and solar radiation to be of the same sign.
 
+In the following exercise we will therefore try to understand how the ozone concentration is correlated with solar radiation (400-770 nm) and temperature.
+
+
+### Add full date column
 To make the dataset more easy to use, first add a column with the full date of each observation.
 ```{r}
-year <- c(rep(1973,153)) #Data are all from the same year
+year <- c(rep(1973,153)) # data are all from the same year
 
+# combine day, month and year in a df
 numeric_dates <- data.frame(
                    cbind(airquality$Day, 
-                         airquality$Month, #create a dataset with 3 columns
+                         airquality$Month,
                          year)            
                    )
 names(numeric_dates) <- c("day", "month", "year")
 
+# convert df into nice date object
 dates <- as.Date(with(numeric_dates, paste(year, month, day, sep = "-")), format = "%Y-%m-%d")
 
+# add date object to the airquality df
 airquality <- airquality |> 
   dplyr::mutate(Date = dates)
 
 ```
 
-
+### Distribution of ozone concentration
 Then have a look at the distribution of the main variable of interest: ozone concentration.
 ```{r}
 summary(airquality$Ozone)
 ```
-From the summary of the Ozone concentration measurements, we can infer a right-skewed distribution (mean > median), indicating that there are some very high values that could be potential outliers. The concentration ranges from 1 to 168 ppb. The mean is 42.13 ppb.
+From the summary of the Ozone concentration measurements, we can infer a right-skewed distribution (mean > median), indicating that there are a few very high values that could be potential outliers. The concentration ranges from 1 to 168 ppb. The mean is 42.13 ppb.
 
 ```{r}
 ggplot(airquality, aes(x = Ozone)) +
@@ -65,8 +75,9 @@ ggplot(airquality, aes(x = Ozone)) +
   theme_minimal()
 ```
 
-The density plot confirms the right-skewedness of the distribution. It also shows a bimodal distribution of ozone concentration, with a main peak at around 25 ppb and a second at around 60 ppb, which wasn't visible in the sole numeric summary of the variable.
+The density plot confirms the right-skewedness of the distribution. It also shows a bimodal distribution of ozone concentration, with a main peak at around 20 ppb and a second at around 75 ppb, which wasn't visible in the sole numeric summary of the variable.
 
+## Outliers
 Before getting a closer look at the relation between ozone concentration and the other variables, we'll investigate the potential outliers.
 ```{r}
 residuals <- lm(Ozone~Temp + Wind + Solar.R, data = airquality)$residuals
@@ -84,34 +95,42 @@ plot_airquality_out |>
                      labels = c("No", "Yes")
                      ) +
   labs( y = expression(paste("Ozone concentration (ppb)"))) +
-  theme_classic()
+  theme_minimal()
 ```
 
-Locate and take a look at the outlier
+#### Locate and take a look at the potential outlier
 ```{r}
-rowindex_residuals #locate outlier
+rowindex_residuals
 airquality[117,]
 
 ```
-Looking at a simple linear regression on wind, temperature and solar radiation and defining the outliers with respect to the residuals, we find one potential outlier on the 25th of August at 168 ppb. We will remove it before continuing with the regression analysis.
+Looking at a linear regression on wind, temperature and solar radiation and defining the outliers with respect to the residuals, we find one potential outlier on the 25th of August at 168 ppb. From the plot displayed above we can see that the second highest value is lower than 150 ppb. We also know from the distribution of the variable Ozone that there are very few observations at the lower end of the distribution. The value of 168 ppb is therefore likely to be a measurement error and we will remove it before continuing with the regression analysis.
 
 
-Remove the outlier
+
+#### Remove the outlier
 ```{r}
 airquality_short <- airquality |> 
                     dplyr::slice(-c(117))
 
 ```
 
+## Linear regression
 
 In order to understand how the ozone concentration and the other variables are associated, we'll proceed at a multiple linear regression analysis that includes the solar radiation, temperature and wind variables.
 ```{r}
 linear_ozone <- lm(Ozone ~ Solar.R + Temp + Wind, data = airquality_short)
 summary(linear_ozone)
 ```
-From the OLS Regression we can see the ozone concentration is positively associated with the temperature as well as with the solar radiation. For each additional Fahrenheit, we expect the ozone concentration to increase by 1.74 ppb. For each additional lang, we expect an increase of 0.05 ppb. Conversely, the ozone concentration is negatively associated with wind. For every additional mph, we expect a decrease in ozone concentration by 3.3 ppb. Wind and temperature coefficients are significant far beyond the 1%-level, while the solar radiation coefficient is significant on the 10%-level.
 
-Noticing that the ozone concentration seems to be higher when temperatures and solar radiation increase, we should be able to see a seasonal increase of the ozone concentration during summer. First, we'll look at the monthly means of solar radiation and temperature:
+#### Interpretation of the linear model
+From the OLS Regression we can see that the ozone concentration is positively associated with the temperature as well as with the solar radiation. For each additional Fahrenheit, we expect the ozone concentration to increase by 1.74 ppb. For each additional lang, we expect an increase of 0.05 ppb. Conversely, the ozone concentration is negatively associated with wind. For every additional mph, we expect a decrease in ozone concentration by 3.3 ppb. Wind and temperature coefficients are significant far beyond the 1%-level, while the solar radiation coefficient is significant on the 10%-level.
+
+Noticing that the ozone concentration seems to be higher when temperatures and solar radiation increase, it would be interesting to have a look at the temporal evolution of the mean ozone concentration to see if we can detect some seasonal patterns.
+
+We might want to be cautious though because the seasonal patterns of solar radiation and temperature are likely to be somewhat different. Solar radiation should be highest during the late Spring/Summer begin (in months like May, June and July) while the highest temperatures are not expected in June but rather in July and August. We'll look at the monthly means of solar radiation and temperature and try to disentangle the correlations.
+
+### Investigate seasonal patterns
 ```{r}
 
 monthly_summary <- airquality_short |> 
@@ -130,13 +149,13 @@ monthly_summary
 
 As expected, July and August are the hottest months, which is why we would expect a higher ozone concentration mean during these two months too.
 
-Conversely, if July is the month with the most solar radiation, August is only on fourth place.
+Conversely, if July is the month with the most solar radiation, August is only on fourth place and May and June show higher solar radiation means.
 
-Knowing that the coefficient of the temperature is higher than the one of solar radiation, we would logically expect a higher ozone concentration during July but also on August, even if May and June have on average more solar radiation.
+The seasonal pattern is therefore not completely straightforward. We would certainly expect July to show the highest mean ozone concentration (maximum of solar radiation and almost maximum of mean temperature). But then it less clear whether June or August will show the second highest mean concentration. August is the hottest month on average but has a lower average solar radiation while June shows a higher average solar radiation but lower temperatures. Since the association of an additional Fahrenheit degree with the ozone concentration is higher than the one of an additional lang (higher coefficient as well as higher significance), we would expect the temperature association to weigh more in than the solar radiation. Therefore, August should show a higher mean ozone concentration than June (same holds for the comparison of August and May).
 
-Additionnally, we can notice that the average wind speed is lowest and almost the same in July and August, which would also speak for higher ozone concentration in those two months, since it's negatively associated with it.
+Also important to account for is the wind: as seen before in the regression summary, an increase of 1 mph is associated with a decrease of 2.76 ppb in the ozone concentration. We can notice in the monthly mean table that the average wind speed is lowest and almost the same in July and August, which would also speak for higher ozone concentration in those two months. The lower wind speeds and the higher temperatures of August compared to June should therefore overcompensate the fact that August has on average less solar radiation than June (and May).
 
-The average ozone concentration per month is therefore displayed in the following graph:
+To check our hypothesis, the average ozone concentration per month is displayed in the following graph:
 ```{r}
 ozone_mean <- airquality_short |> 
   dplyr::group_by(Month) |> 
@@ -146,7 +165,7 @@ ozone_mean <- airquality_short |>
 
 plot_mean_oz <- ggplot(ozone_mean, aes(x = factor(Month), 
                                        y = mean_oz, group = 1)) +
-  geom_line(color = "darkgreen", size = 1) +
+  geom_line(color = "darkgreen", linewidth = 1) +
   geom_point(size = 4, color = "darkgreen", fill = "darkgreen", shape = 21)+
   
   geom_text(aes(y = mean_oz + 4, label = format(mean_oz, digits = 2)), 
@@ -158,14 +177,26 @@ plot_mean_oz <- ggplot(ozone_mean, aes(x = factor(Month),
        y = expression(paste("Mean Ozone Concentration (ppb)"))) +
    scale_x_discrete(labels = c("5" = "May", "6" = "June", "7" = "July", "8" = "August", "9" = "September")) +
   theme(axis.text.x = element_text(size = 11)) +
-  scale_y_continuous(limits = c(0, 65), expand = c(0, 0))
+  scale_y_continuous(limits = c(0, 65), expand = c(0, 0)) +
+  theme_minimal()
  
 
 plot_mean_oz
 ```
 
-As expected, the warmest and calmest (in terms of wind) months, July and August, also have the highest mean ozone concentration (respectively 59 and 56 ppb). We can yet underline, that if August was very slightly hotter than July on average (84.0 °F against 83.9°F), the mean ozone concentration is lower. This is probably due to the fact, that solar radiation in that month was very low, compared to the Spring months and to July. Since solar radiation is also positively correlated with ozone concentration, it is very likely, that the lower solar radiation of August somewhat counterbalanced the heat "effect".
 
-Furthermore, these higher mean values in July and August probably also explain the bimodal distribution showed earlier. May, June and September are responsible for the first peak of the distribution at around 25 ppb whereas July and August induce the second, smaller peak at around 60 ppb.
 
-In the end we can see that the hypothesis, that the correlations between ozone concentration with solar radiation and with temperature both have the same sign, seems to hold. We could also investigate the relations a bit further and find out that temperature is more strongly associated to ozone concentration than solar radiation. As expected, the hottest months (July and August) therefore also have the highest mean ozone concentration. Finally, we could also show a negative association of wind with ozone concentration.
+## Interpretation of the results
+
+As expected, the warmest and calmest (in terms of wind) months, July and August, also have the highest mean ozone concentration (respectively 59 and 56 ppb). We can yet underline, that if August was very slightly hotter than July on average (84.0 °F against 83.9°F), the mean ozone concentration is lower. As discussed above this is probably due to the fact, that solar radiation in that month was very low, compared to the Spring months and to July.
+
+Furthermore, these higher mean values in July and August probably also explain the bimodal distribution of the ozone concentration discussed earlier. May, June and September are mainly responsible for the first peak of the distribution at around 25 ppb whereas July and August mainly induce the second, smaller peak at around 75 ppb.
+
+The mean ozone concentration is logically lower in May than in June (lower mean temperature and mean solar radiation as well as higher mean wind speed). Interesting and somewhat unexpected, September shows a higher ozone concentration average than June (31 VS 29 ppb) despite being colder and having a lower solar radiation average. The wind speed is yet slightly lower than in June on average and could explain the bigger mean ozone concentration.
+
+In the end we can see that the hypothesis stating that the correlations between ozone concentration with solar radiation and with temperature both have the same sign, seems to hold (for the solar radiation, the positive coefficient has a signigicance level of 10% only though). 
+
+What we didn't think of at first, is that both variables don't have the exact same temporal evolution. Solar radiation shows higher values earlier in the season (May-June-July) while the highest temperatures are observed somewhat later (July-August). July is therefore indubitably the month with the highest mean ozone concentration according to our hypothesis. This was also verified in the data. For August and June, the analysis wasn't as evident as for July (lower temperatures but higher solar radiation in June and vice versa for August). Since the association of ozone concentration with temperature seems to be stronger than the one with solar radiation and taking into account that wind (lower in August than in June) has a negative association with ozone it is yet relatively clear why August shows higher ozone concentration levels than June on average.
+
+N.B. The data used covers only one season (1973) and we can't draw any climatological conclusions from this exercise. To scientifically assess the results, a long-term analysis and comparisons with other measurement sites would be necessary.
+
